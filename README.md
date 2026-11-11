@@ -24,6 +24,31 @@ ctest --test-dir build --output-on-failure
 Requires a C++17 compiler and CMake 3.16+. The core library has no dependencies
 and builds on Linux, macOS and Windows; only the future SocketCAN reader is Linux-only.
 
+## Qt GUI (optional)
+
+`canlog_gui` shows the capture as a trace table, the decoded signals of the selected
+frame, and a plot of any signal over time. It is built only when Qt 6 is found.
+
+1. Install Qt 6 (Qt Online Installer, free Qt account) and tick the **MSVC 64-bit** kit
+   for your Visual Studio, e.g. `C:\Qt\6.7.2\msvc2019_64`.
+2. Point CMake at it and build:
+   ```powershell
+   cmake -S . -B build -DCMAKE_PREFIX_PATH=C:\Qt\6.7.2\msvc2019_64
+   cmake --build build --config Release
+   ```
+   CMake prints `Qt6 found: building canlog_gui` (or `Qt6 not found: skipping ...`).
+3. Copy the Qt DLLs next to the exe once:
+   ```powershell
+   C:\Qt\6.7.2\msvc2019_64\bin\windeployqt.exe build\Release\canlog_gui.exe
+   ```
+4. Run:
+   ```powershell
+   .\build\Release\canlog_gui.exe data\sample.dbc data\sample.log
+   ```
+   Or start it empty and use File > Open DBC / Open Log.
+
+On Linux: `sudo apt install qt6-base-dev`, then the normal build; the GUI is picked up automatically.
+
 ## Layout
 
 | Path | Purpose |
@@ -32,7 +57,11 @@ and builds on Linux, macOS and Windows; only the future SocketCAN reader is Linu
 | `include/canlog/dbc.hpp`, `src/dbc.cpp` | DBC parser: `BO_`, `SG_` (Intel/Motorola, signed, factor/offset, multiplexing), `VAL_` tables |
 | `include/canlog/decoder.hpp`, `src/decoder.cpp` | Bit extraction, sign extension, scaling, mux handling |
 | `include/canlog/logreader.hpp`, `src/logreader.cpp` | `candump -L` line parser and streaming reader |
+| `include/canlog/source.hpp` | `CanSource` interface: a log file now, live SocketCAN later |
+| `include/canlog/series.hpp`, `src/series.cpp` | Extract one signal's values over a whole capture (plotting/export) |
+| `include/canlog/format.hpp`, `src/format.cpp` | Hex formatting of payloads |
 | `apps/canlog_cli.cpp` | Command line tool (decode, filter, CSV export, summary) |
+| `gui/` | Qt 6 Widgets front end: `FrameTableModel`, `PlotWidget` (plain QPainter), `MainWindow` |
 | `tests/test_main.cpp` | Unit tests plus an end-to-end test on the sample data |
 | `tools/gen_sample_log.py` | Generates `data/sample.log` with an independent encoder (cross-check for the decoder) |
 
@@ -73,11 +102,12 @@ and builds on Linux, macOS and Windows; only the future SocketCAN reader is Linu
      cangen vcan0 -g 10 -I 100 -L 8  # synthetic traffic
      ```
    - Write your own logger that records in `candump -L` format (ASC/BLF later).
-3. **Qt GUI**
-   - Qt 6 Widgets (or QML). `QAbstractTableModel` for a trace window; a signal tree
-     populated from the `Database`; a live plot (Qt Charts or QCustomPlot).
-   - Keep the reader on its own thread (`QThread` / worker object) and batch updates
-     to the UI so it stays responsive at high frame rates.
+3. **Qt GUI** *(first version done: file-based trace, decoded signals, one plot)*
+   - Next: multiple signals on one plot, zoom/pan, filter by id or message, search,
+     export the plotted series to CSV.
+   - For live capture: run the `CanSource` on its own thread (`QThread` / worker object),
+     batch updates to the UI, and use a ring buffer so memory stays bounded.
+   - Consider replacing `PlotWidget` with Qt Charts or QCustomPlot once you need zooming.
    - Qt note: `canlog` already avoids the name `signals` (a Qt macro).
 4. **Protocol depth**: CAN FD, extended multiplexing, J1939 PGN/SA helpers, ASC and BLF import.
 5. **Engineering polish** (what reviewers look at)

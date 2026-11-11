@@ -10,7 +10,10 @@
 
 #include "canlog/dbc.hpp"
 #include "canlog/decoder.hpp"
+#include "canlog/format.hpp"
 #include "canlog/logreader.hpp"
+#include "canlog/series.hpp"
+#include "canlog/source.hpp"
 
 #ifndef CANLOG_DATA_DIR
 #error "CANLOG_DATA_DIR must be defined by the build system"
@@ -439,6 +442,81 @@ void test_sample_data() {
     CHECK(saw_eec1 && saw_oil_temp && saw_oil_pressure && saw_abs);
 }
 
+// ---------------------------------------------------------------- GUI support code
+
+void test_frame_data_hex() {
+    CanFrame f;
+    f.dlc = 3;
+    f.data = {0x80, 0x0C, 0x5A, 0xFF, 0, 0, 0, 0};   // bytes beyond DLC must not be printed
+    CHECK(frame_data_hex(f) == "80 0C 5A");
+
+    f.dlc = 0;
+    CHECK(frame_data_hex(f).empty());
+
+    f.dlc = 8;
+    f.data = {0, 1, 2, 3, 4, 5, 6, 0xAB};
+    CHECK(frame_data_hex(f) == "00 01 02 03 04 05 06 AB");
+}
+
+void test_can_source_interface() {
+    std::istringstream in("(1.0) can0 100#01\n(2.0) can0 200#0203\nbad line\n");
+    LogReader reader(in);
+    CanSource& source = reader;   // LogReader is usable through the abstract interface
+    const std::vector<CanFrame> frames = read_all(source);
+    CHECK(frames.size() == 2);
+    CHECK(frames.size() == 2 && frames[1].id == 0x200);
+    CHECK(reader.skipped_lines() == 1);
+    CHECK(!source.next());   // exhausted
+}
+
+void test_series_extraction() {
+    const std::string dir = CANLOG_DATA_DIR;
+    const Database db = Database::parse_file(dir + "/sample.dbc");
+    std::ifstream log(dir + "/sample.log");
+    LogReader reader(log);
+    const std::vector<CanFrame> frames = read_all(reader);
+    CHECK(frames.size() == 103);
+
+    // Intel signal, 20 ms rate: 51 samples, 800 -> 3000 rpm over one second
+    const auto rpm = extract_series(frames, db, "EngineData", "EngineSpeed");
+    CHECK(rpm.size() == 51);
+    if (rpm.size() == 51) {
+        CHECK_NEAR(rpm.front().t, 0.0, 1e-9);
+        CHECK_NEAR(rpm.front().value, 800.0, 1e-9);
+        CHECK_NEAR(rpm.back().t, 1.0, 1e-5);
+        CHECK_NEAR(rpm.back().value, 3000.0, 1e-9);
+    }
+
+    // Motorola signed signal: 21 samples, both signs present
+    const auto steer = extract_series(frames, db, "VehicleDynamics", "SteeringAngle");
+    CHECK(steer.size() == 21);
+    CHECK(!steer.empty() && steer[5].value > 29.0);      // t = 0.25 s: +30 deg
+    CHECK(steer.size() == 21 && steer[15].value < -29.0);   // t = 0.75 s: -30 deg
+
+    // 29-bit id message
+    CHECK(extract_series(frames, db, "EEC1", "EngineSpeedJ1939").size() == 11);
+
+    // Multiplexed signal: OilTemp only exists in frames with selector 0 (3 of the 6)
+    const auto oil = extract_series(frames, db, "DiagFrame", "OilTemp");
+    CHECK(oil.size() == 3);
+    if (oil.size() == 3) {
+        CHECK_NEAR(oil[0].value, 70.0, 1e-9);
+        CHECK_NEAR(oil[1].value, 74.0, 1e-9);
+        CHECK_NEAR(oil[2].value, 78.0, 1e-9);
+    }
+
+    // Unknown names and empty input
+    CHECK(extract_series(frames, db, "NoSuchMessage", "EngineSpeed").empty());
+    CHECK(extract_series(frames, db, "EngineData", "NoSuchSignal").empty());
+    CHECK(extract_series({}, db, "EngineData", "EngineSpeed").empty());
+
+    // find_signal
+    const Signal* s = find_signal(db, "EngineData", "CoolantTemp");
+    CHECK(s != nullptr && s->unit == "degC");
+    CHECK(find_signal(db, "EngineData", "Nope") == nullptr);
+    CHECK(find_signal(db, "Nope", "CoolantTemp") == nullptr);
+}
+
 }  // namespace
 
 int main() {
@@ -453,6 +531,9 @@ int main() {
     test_log_line_parsing();
     test_log_reader();
     test_sample_data();
+    test_frame_data_hex();
+    test_can_source_interface();
+    test_series_extraction();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

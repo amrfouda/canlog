@@ -6,6 +6,7 @@
 #include <string>
 
 #include "canlog/frame.hpp"
+#include "canlog/source.hpp"
 
 namespace canlog {
 
@@ -18,11 +19,11 @@ std::optional<CanFrame> parse_candump_line(const std::string& line);
 
 // Streams frames out of a candump -L log. Unparsable lines are skipped and
 // counted; blank lines are ignored silently.
-class LogReader {
+class LogReader : public CanSource {
 public:
     explicit LogReader(std::istream& in) : in_(in) {}
 
-    std::optional<CanFrame> next();
+    std::optional<CanFrame> next() override;
     size_t skipped_lines() const { return skipped_; }
 
 private:
