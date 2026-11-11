@@ -1,0 +1,32 @@
+VERSION "canlog sample"
+
+NS_ :
+
+BS_:
+
+BU_: Engine Gateway Brake Diag
+
+BO_ 256 EngineData: 8 Engine
+ SG_ EngineSpeed : 0|16@1+ (0.25,0) [0|16383.75] "rpm" Gateway
+ SG_ CoolantTemp : 16|8@1+ (1,-40) [-40|215] "degC" Gateway
+ SG_ ThrottlePos : 24|8@1+ (0.4,0) [0|100] "%" Gateway
+ SG_ EngineState : 32|2@1+ (1,0) [0|3] "" Gateway
+
+BO_ 512 VehicleDynamics: 8 Gateway
+ SG_ VehicleSpeed : 7|16@0+ (0.01,0) [0|250] "km/h" Engine
+ SG_ SteeringAngle : 23|16@0- (0.1,0) [-780|780] "deg" Engine
+
+BO_ 768 BrakeStatus: 4 Brake
+ SG_ BrakePressure : 0|12@1+ (0.1,0) [0|400] "bar" Gateway
+ SG_ AbsActive : 12|1@1+ (1,0) [0|1] "" Gateway
+
+BO_ 1024 DiagFrame: 8 Diag
+ SG_ DiagSelector M : 0|8@1+ (1,0) [0|255] "" Gateway
+ SG_ OilTemp m0 : 8|16@1+ (0.1,-40) [-40|200] "degC" Gateway
+ SG_ OilPressure m1 : 8|16@1+ (0.1,0) [0|1000] "kPa" Gateway
+
+BO_ 2364539904 EEC1: 8 Engine
+ SG_ EngineTorque : 16|8@1+ (1,-125) [-125|125] "%" Gateway
+ SG_ EngineSpeedJ1939 : 24|16@1+ (0.125,0) [0|8031.875] "rpm" Gateway
+
+VAL_ 256 EngineState 0 "Off" 1 "Cranking" 2 "Running" 3 "Fault" ;
