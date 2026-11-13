@@ -1,5 +1,8 @@
-   [![build](https://github.com/amrfouda/canlog/actions/workflows/build.yml/badge.svg)](https://github.com/amrfouda/canlog/actions/workflows/build.yml)
 # canlog
+
+   [![build](https://github.com/amrfouda/canlog/actions/workflows/build.yml/badge.svg)](https://github.com/amrfouda/canlog/actions/workflows/build.yml)
+
+   ![canlog GUI](docs/screenshot.png)
 
 A CAN frame logger and DBC decoder in C++17. Phase 1 (this repo today) decodes
 `candump -L` logs with a DBC file; the roadmap below grows it into a live
