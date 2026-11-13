@@ -35,6 +35,29 @@ if(CANLOG_BUILD_BENCH)
         CANLOG_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 endif()
 
+# Fuzzing. The standalone mutation fuzzer works with any compiler. The libFuzzer
+# binaries need Clang; configure with sanitizers so crashes are detected:
+#   cmake -S . -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ -DCANLOG_BUILD_FUZZ=ON \
+#         -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -g"
+#   cmake --build build-fuzz && build-fuzz/canlog_fuzz_dbc data/ -max_total_time=60
+option(CANLOG_BUILD_FUZZ "Build fuzzing targets" OFF)
+if(CANLOG_BUILD_FUZZ)
+    add_library(canlog_fuzz_targets STATIC fuzz/fuzz_targets.cpp)
+    target_include_directories(canlog_fuzz_targets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/fuzz)
+    target_link_libraries(canlog_fuzz_targets PUBLIC canlog)
+
+    add_executable(canlog_mutation_fuzz fuzz/mutation_fuzz.cpp)
+    target_link_libraries(canlog_mutation_fuzz PRIVATE canlog_fuzz_targets)
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        foreach(name dbc log)
+            add_executable(canlog_fuzz_${name} fuzz/entry_${name}.cpp)
+            target_link_libraries(canlog_fuzz_${name} PRIVATE canlog_fuzz_targets)
+            target_link_options(canlog_fuzz_${name} PRIVATE -fsanitize=fuzzer)
+        endforeach()
+    endif()
+endif()
+
 # Qt 6 GUI. Optional: skipped automatically when Qt 6 cannot be found, so the
 # library, CLI and tests still build on machines without Qt. To enable it, point
 # CMake at your Qt install, e.g.

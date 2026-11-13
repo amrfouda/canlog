@@ -43,8 +43,8 @@ jobs:
           path: dist
 
   linux:
-    name: Linux (GCC, ASan + UBSan, no GUI)
-    runs-on: ubuntu-latest
+    name: Linux (GCC 13, ASan + UBSan, no GUI)
+    runs-on: ubuntu-24.04   # pinned image: GCC 13
     steps:
       - uses: actions/checkout@v4
 
@@ -60,3 +60,51 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  fuzz:
+    name: Fuzz smoke test (clang 18, libFuzzer + ASan/UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang 18 and its sanitizer/fuzzer runtime
+        run: sudo apt-get update && sudo apt-get install -y clang-18 libclang-rt-18-dev
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_COMPILER=clang++-18
+          -DCANLOG_BUILD_FUZZ=ON
+          -DCANLOG_BUILD_GUI=OFF
+          -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=all"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests under the sanitizers
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Fuzz the DBC parser (30 s)
+        run: |
+          mkdir -p corpus_dbc && cp data/sample.dbc corpus_dbc/
+          build/canlog_fuzz_dbc corpus_dbc -max_total_time=30 -max_len=65536
+
+      - name: Fuzz the log parser (30 s)
+        run: |
+          mkdir -p corpus_log && cp data/sample.log corpus_log/
+          build/canlog_fuzz_log corpus_log -max_total_time=30 -max_len=65536
+
+      - name: Mutation fuzzer (300k inputs)
+        run: build/canlog_mutation_fuzz --iterations 300000 --dbc data/sample.dbc --log data/sample.log
+
+      - name: Keep crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            crash-*
+            slow-unit-*
+            crash-input.bin
+          if-no-files-found: ignore

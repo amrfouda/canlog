@@ -9,3 +9,4 @@ canlog-windows/
 *.zip
 canlog-windows/
 *.zip
+build*/

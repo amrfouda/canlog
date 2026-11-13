@@ -249,6 +249,76 @@ void test_dbc_errors() {
     CHECK(db.find(7, false) && db.find(7, false)->signal_defs.size() == 1);
 }
 
+template <typename Fn>
+bool throws_parse_error(Fn&& fn) {
+    try {
+        fn();
+    } catch (const ParseError&) {
+        return true;
+    }
+    return false;
+}
+
+// Regression tests for bugs found by the fuzzer and by comparing against the old parser.
+void test_dbc_robustness() {
+    {   // A VAL_ line with 20000 entries used to overflow the stack (std::regex recursion).
+        std::string text = "BO_ 256 M: 8 A\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" B\nVAL_ 256 S";
+        for (int i = 0; i < 20000; ++i) text += " " + std::to_string(i) + " \"v" + std::to_string(i) + "\"";
+        text += " ;\n";
+        const Database db = Database::parse_string(text);
+        const Message* m = db.find(256, false);
+        CHECK(m && m->signal_defs.size() == 1);
+        CHECK(m && m->signal_defs[0].value_table.size() == 20000);
+        CHECK(m && m->signal_defs[0].value_table.at(19999) == "v19999");
+    }
+    {   // A megabyte of junk on one line must be skipped cheaply, not crash.
+        const Database db = Database::parse_string("BO_ 1 A: 8 X\n" + std::string(1000000, '9') + "\n");
+        CHECK(db.messages().size() == 1);
+    }
+    {   // Very long signal line (huge receiver list) still parses.
+        std::string receivers;
+        for (int i = 0; i < 5000; ++i) receivers += "Node" + std::to_string(i) + ",";
+        const Database db = Database::parse_string(
+            "BO_ 1 A: 8 X\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" " + receivers + "Last\n");
+        CHECK(db.find(1, false) && db.find(1, false)->signal_defs.size() == 1);
+    }
+
+    // A malformed BO_ line is an error, not silently skipped. (It used to be skipped, which
+    // attached the following signals to the previous message.)
+    CHECK(throws_parse_error([] {
+        Database::parse_string("BO_ 1 A: 8 X\n SG_ S1 : 0|8@1+ (1,0) [0|0] \"\" G\nBO_ 2 B 8 X\n"
+                               " SG_ S2 : 0|8@1+ (1,0) [0|0] \"\" G\n");
+    }));
+    // ...and so is a signal line with something glued to the SG_ keyword.
+    CHECK(throws_parse_error([] {
+        Database::parse_string("BO_ 1 A: 8 X\n SG_7S : 0|8@1+ (1,0) [0|0] \"\" G\n");
+    }));
+
+    {   // Other sections that merely start with BO_ / SG_ are ignored.
+        const Database db = Database::parse_string(
+            "BO_ 1 A: 8 X\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" G\nBO_TX_BU_ 1 : A,B;\nSG_MUL_VAL_ 1 S M 0-1;\n");
+        CHECK(db.messages().size() == 1 && db.messages()[0].signal_defs.size() == 1);
+    }
+    {   // Vector's pseudo-message for signals without a message is skipped, with its signals.
+        const Database db = Database::parse_string(
+            "BO_ 3221225472 VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX\n SG_ Orphan : 0|8@1+ (1,0) [0|0] \"\" G\n"
+            "BO_ 7 Real: 8 X\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" G\n");
+        CHECK(db.messages().size() == 1 && db.find(7, false) != nullptr);
+    }
+    {   // Value tables: INT64_MIN is fine, one beyond is an error, tables for unknown messages are ignored.
+        const std::string base = "BO_ 1 A: 8 X\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" G\n";
+        const Database db = Database::parse_string(base + "VAL_ 1 S -9223372036854775808 \"min\" ;\n");
+        CHECK(db.find(1, false)->signal_defs[0].value_table.count(INT64_MIN) == 1);
+        CHECK(throws_parse_error([&] { Database::parse_string(base + "VAL_ 1 S -9223372036854775809 \"x\" ;\n"); }));
+        CHECK(!throws_parse_error([&] { Database::parse_string(base + "VAL_ 99 S -9223372036854775809 \"x\" ;\n"); }));
+    }
+    // Absurd numbers are rejected instead of being truncated into wrong small ones.
+    CHECK(throws_parse_error([] { Database::parse_string("BO_ 1 A: 4294967296 X\n"); }));
+    CHECK(throws_parse_error([] {
+        Database::parse_string("BO_ 1 A: 8 X\n SG_ S : 4294967296|8@1+ (1,0) [0|0] \"\" G\n");
+    }));
+}
+
 // ---------------------------------------------------------------- frame decoding
 
 void test_decode_frame() {
@@ -526,6 +596,7 @@ int main() {
     test_scaling_and_sign();
     test_dbc_parse();
     test_dbc_errors();
+    test_dbc_robustness();
     test_decode_frame();
     test_multiplexing();
     test_log_line_parsing();
