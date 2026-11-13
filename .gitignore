@@ -5,3 +5,5 @@ compile_commands.json
 .vs/
 out/
 *.zip
+canlog-windows/
+*.zip
