@@ -86,10 +86,14 @@ Measured with `canlog_bench` (Release build, 1,000,000 synthetic frames, fastest
 
 | Stage | Throughput | Per frame |
 |---|---|---|
-| Parse `candump -L` text to frame | 0.54 M frames/s | 1859 ns |
-| Decode frame to signals (`sample.dbc`) | 3.47 M frames/s | 288 ns |
+| Parse `candump -L` text to frame | 2.82 M frames/s | 355 ns |
+| Decode frame to signals (`sample.dbc`) | 3.63 M frames/s | 276 ns |
 
-Decoding yields about 7.6 M signals/s on the sample database.
+Decoding yields about 8.0 M signals/s on the sample database.
+
+Parsing was optimized from 0.54 M frames/s (1859 ns) to 2.82 M frames/s by replacing
+stream-based parsing with a direct text scan, verified against the previous
+implementation on 3 million randomly mutated input lines.
 
 Machine: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz, MSVC 19.39 (Visual Studio 2022), Windows 10, Release.
 Run it yourself: `cmake --build build --config Release && build\Release\canlog_bench.exe`

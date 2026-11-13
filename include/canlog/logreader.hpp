@@ -4,6 +4,7 @@
 #include <iosfwd>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "canlog/frame.hpp"
 #include "canlog/source.hpp"
@@ -15,7 +16,7 @@ namespace canlog {
 //   (1700000000.123456) can0 0CF00400#FFFFFF00
 //   (1700000000.123456) can0 123#R
 // Returns nullopt for blank, malformed or unsupported (CAN FD) lines.
-std::optional<CanFrame> parse_candump_line(const std::string& line);
+std::optional<CanFrame> parse_candump_line(std::string_view line);
 
 // Streams frames out of a candump -L log. Unparsable lines are skipped and
 // counted; blank lines are ignored silently.

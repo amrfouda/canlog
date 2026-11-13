@@ -1,42 +1,82 @@
 #include "canlog/logreader.hpp"
 
-#include <cctype>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
 #include <istream>
-#include <sstream>
+#include <string>
+#include <string_view>
 
 namespace canlog {
 namespace {
 
-bool all_hex(const std::string& s) {
-    for (unsigned char c : s) {
-        if (!std::isxdigit(c)) return false;
+// Same whitespace set as the C locale's isspace().
+bool is_space(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+}
+
+int hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+bool all_hex(std::string_view s) {
+    for (char c : s) {
+        if (hex_value(c) < 0) return false;
     }
+    return true;
+}
+
+// Next whitespace-delimited token starting at `p`; advances `p` past it.
+bool next_token(const char*& p, const char* end, std::string_view& token) {
+    while (p != end && is_space(*p)) ++p;
+    if (p == end) return false;
+    const char* start = p;
+    while (p != end && !is_space(*p)) ++p;
+    token = std::string_view(start, static_cast<size_t>(p - start));
+    return true;
+}
+
+// "(1700000000.123456)" -> 1700000000.123456
+bool parse_timestamp(std::string_view token, double& out) {
+    if (token.size() < 3 || token.front() != '(' || token.back() != ')') return false;
+    const std::string_view inner = token.substr(1, token.size() - 2);
+
+    char buf[64];   // real timestamps are ~17 characters
+    if (inner.size() >= sizeof buf) return false;
+    std::memcpy(buf, inner.data(), inner.size());
+    buf[inner.size()] = '\0';
+
+    char* parsed_end = nullptr;
+    errno = 0;
+    const double value = std::strtod(buf, &parsed_end);
+    if (parsed_end == buf || errno == ERANGE) return false;
+    out = value;
     return true;
 }
 
 }  // namespace
 
-std::optional<CanFrame> parse_candump_line(const std::string& line) {
-    std::istringstream ss(line);
-    std::string ts, iface, frame_str;
-    if (!(ss >> ts >> iface >> frame_str)) return std::nullopt;
+std::optional<CanFrame> parse_candump_line(std::string_view line) {
+    const char* p = line.data();
+    const char* const end = p + line.size();
 
-    // "(1700000000.123456)"
-    if (ts.size() < 3 || ts.front() != '(' || ts.back() != ')') return std::nullopt;
+    std::string_view ts, iface, frame_str;
+    if (!next_token(p, end, ts) || !next_token(p, end, iface) || !next_token(p, end, frame_str)) {
+        return std::nullopt;   // anything after the third token is ignored
+    }
 
     CanFrame f;
-    try {
-        f.timestamp = std::stod(ts.substr(1, ts.size() - 2));
-    } catch (const std::logic_error&) {
-        return std::nullopt;
-    }
-    f.iface = iface;
+    if (!parse_timestamp(ts, f.timestamp)) return std::nullopt;
+    f.iface.assign(iface.data(), iface.size());
 
     // "<id>#<payload>"
     const size_t hash = frame_str.find('#');
-    if (hash == std::string::npos) return std::nullopt;
-    const std::string id_str = frame_str.substr(0, hash);
-    const std::string payload = frame_str.substr(hash + 1);
+    if (hash == std::string_view::npos) return std::nullopt;
+    const std::string_view id_str = frame_str.substr(0, hash);
+    const std::string_view payload = frame_str.substr(hash + 1);
 
     if (!payload.empty() && payload[0] == '#') return std::nullopt;   // "123##..." = CAN FD, not supported yet
 
@@ -49,7 +89,9 @@ std::optional<CanFrame> parse_candump_line(const std::string& line) {
         return std::nullopt;
     }
     if (!all_hex(id_str)) return std::nullopt;
-    f.id = static_cast<uint32_t>(std::stoul(id_str, nullptr, 16));
+    uint32_t id = 0;
+    for (char c : id_str) id = (id << 4) | static_cast<uint32_t>(hex_value(c));
+    f.id = id;
     if (!f.extended && f.id > 0x7FF) return std::nullopt;
     if (f.extended && f.id > 0x1FFFFFFF) return std::nullopt;
 
@@ -57,7 +99,7 @@ std::optional<CanFrame> parse_candump_line(const std::string& line) {
     if (!payload.empty() && payload[0] == 'R') {
         f.rtr = true;
         if (payload.size() == 2) {
-            if (!std::isdigit(static_cast<unsigned char>(payload[1]))) return std::nullopt;
+            if (payload[1] < '0' || payload[1] > '9') return std::nullopt;
             const int dlc = payload[1] - '0';
             if (dlc > 8) return std::nullopt;
             f.dlc = static_cast<uint8_t>(dlc);
@@ -70,7 +112,7 @@ std::optional<CanFrame> parse_candump_line(const std::string& line) {
     if (payload.size() % 2 != 0 || payload.size() > 16 || !all_hex(payload)) return std::nullopt;
     f.dlc = static_cast<uint8_t>(payload.size() / 2);
     for (size_t i = 0; i < f.dlc; ++i) {
-        f.data[i] = static_cast<uint8_t>(std::stoul(payload.substr(2 * i, 2), nullptr, 16));
+        f.data[i] = static_cast<uint8_t>((hex_value(payload[2 * i]) << 4) | hex_value(payload[2 * i + 1]));
     }
     return f;
 }
