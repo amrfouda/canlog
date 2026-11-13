@@ -98,6 +98,32 @@ implementation on 3 million randomly mutated input lines.
 Machine: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz, MSVC 19.39 (Visual Studio 2022), Windows 10, Release.
 Run it yourself: `cmake --build build --config Release && build\Release\canlog_bench.exe`
 
+## Testing & verification
+
+- 253 unit checks (`ctest`), run in CI on Windows (MSVC) and Linux (GCC with ASan/UBSan).
+- Fuzzing: a libFuzzer job in CI plus a standalone mutation fuzzer (`canlog_mutation_fuzz`)
+  for both the DBC parser and the log reader. Fuzzing found a stack overflow in the
+  original regex-based DBC parser, which is why it is now hand-written.
+
+### Cross-checked against cantools
+
+`tools/compare_with_cantools.py` generates random payloads for every message in a DBC,
+decodes them with both canlog and [cantools](https://github.com/cantools/cantools), and
+compares every signal value (relative tolerance 1e-7). It covers Intel and Motorola bit
+layouts, signed values, factor/offset, and multiplexing.
+
+Run against all 58 DBC files in [commaai/opendbc](https://github.com/commaai/opendbc):
+
+- **50 files:** every value agrees with cantools (0 mismatches).
+- **8 files:** cantools refuses to load them (ids wider than 11 bits on standard frames,
+  or invalid syntax); canlog parses them.
+
+Known gap: messages that contain multiplexed signals (`m0`, `m1`, ...) but no selector (`M`)
+are not compared, because cantools cannot decode them either.
+
+Reproduce: `python tools\compare_with_cantools.py --dbc path\to\file.dbc --cli build\Release\canlog_cli.exe`
+(needs `pip install cantools`).
+
 ## Layout
 
 | Path | Purpose |

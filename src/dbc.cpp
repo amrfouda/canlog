@@ -186,9 +186,13 @@ Signal parse_signal_line(size_t line_no, std::string_view line) {
     } else if (!c.at_end() && c.peek() == 'm') {
         c.consume('m');
         const std::string_view n = c.digits();
-        if (n.empty()) bad();
-        sig.mux_role = MuxRole::Muxed;
-        if (!to_u32(n, sig.mux_value)) bad_number();
+        if (!n.empty()) {
+            sig.mux_role = MuxRole::Muxed;
+            if (!to_u32(n, sig.mux_value)) bad_number();
+        }
+        // A bare "m" without a number is not a valid multiplexer marker, but real files
+        // contain it (opendbc's vw_pq.dbc). cantools reads such a signal as an ordinary,
+        // non-multiplexed one, and so do we.
     }
     c.skip_ws();
     if (!c.consume(':')) bad();

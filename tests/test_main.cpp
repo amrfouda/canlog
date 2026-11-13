@@ -294,6 +294,22 @@ void test_dbc_robustness() {
         Database::parse_string("BO_ 1 A: 8 X\n SG_7S : 0|8@1+ (1,0) [0|0] \"\" G\n");
     }));
 
+    {   // A bare "m" (no number) is read as an ordinary signal, like cantools does
+        // (found in opendbc's vw_pq.dbc, probably a typo for "M").
+        const Database db = Database::parse_string(
+            "BO_ 648 Motor_2: 8 Motor\n"
+            " SG_ MpCode m : 6|2@1+ (1,0) [0|3] \"\" G\n"
+            " SG_ Getr m2 : 0|6@1+ (1,0) [0|63] \"\" G\n");
+        const Message* m = db.find(648, false);
+        CHECK(m && m->signal_defs.size() == 2);
+        CHECK(m && m->signal_defs[0].name == "MpCode" && m->signal_defs[0].mux_role == MuxRole::None);
+        CHECK(m && m->signal_defs[1].mux_role == MuxRole::Muxed && m->signal_defs[1].mux_value == 2);
+    }
+    // Still an error: "m" followed by something that is not a number or the colon.
+    CHECK(throws_parse_error([] {
+        Database::parse_string("BO_ 1 A: 8 X\n SG_ S mx : 0|8@1+ (1,0) [0|0] \"\" G\n");
+    }));
+
     {   // Other sections that merely start with BO_ / SG_ are ignored.
         const Database db = Database::parse_string(
             "BO_ 1 A: 8 X\n SG_ S : 0|8@1+ (1,0) [0|0] \"\" G\nBO_TX_BU_ 1 : A,B;\nSG_MUL_VAL_ 1 S M 0-1;\n");
