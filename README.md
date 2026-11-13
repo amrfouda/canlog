@@ -91,7 +91,7 @@ Measured with `canlog_bench` (Release build, 1,000,000 synthetic frames, fastest
 
 Decoding yields about 7.6 M signals/s on the sample database.
 
-Machine: <your CPU>, MSVC 19.39 (Visual Studio 2022), Windows 10, Release.
+Machine: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz, MSVC 19.39 (Visual Studio 2022), Windows 10, Release.
 Run it yourself: `cmake --build build --config Release && build\Release\canlog_bench.exe`
 
 ## Layout
