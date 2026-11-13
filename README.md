@@ -1,4 +1,4 @@
-[![build](https://github.com/amrfouda/canlog/actions/workflows/build.yml/badge.svg)](https://github.com/amrfouda/canlog/actions/workflows/build.yml)
+   [![build](https://github.com/amrfouda/canlog/actions/workflows/build.yml/badge.svg)](https://github.com/amrfouda/canlog/actions/workflows/build.yml)
 # canlog
 
 A CAN frame logger and DBC decoder in C++17. Phase 1 (this repo today) decodes
