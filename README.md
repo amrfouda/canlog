@@ -80,6 +80,20 @@ Design decisions:
 - **Bad input has two paths.** A malformed DBC throws `ParseError` with a line number. A malformed log line is skipped and counted, because real logs contain junk.
 - **The DBC message struct uses `signal_defs`, not `signals`**, because Qt defines `signals` as a macro and would break the header in the GUI.
 
+## Performance
+
+Measured with `canlog_bench` (Release build, 1,000,000 synthetic frames, fastest of 5 runs):
+
+| Stage | Throughput | Per frame |
+|---|---|---|
+| Parse `candump -L` text to frame | 0.54 M frames/s | 1859 ns |
+| Decode frame to signals (`sample.dbc`) | 3.47 M frames/s | 288 ns |
+
+Decoding yields about 7.6 M signals/s on the sample database.
+
+Machine: <your CPU>, MSVC 19.39 (Visual Studio 2022), Windows 10, Release.
+Run it yourself: `cmake --build build --config Release && build\Release\canlog_bench.exe`
+
 ## Layout
 
 | Path | Purpose |
