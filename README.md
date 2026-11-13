@@ -56,6 +56,30 @@ or the [Releases page](https://github.com/amrfouda/canlog/releases) once a relea
 
 On Linux: `sudo apt install qt6-base-dev`, then the normal build; the GUI is picked up automatically.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    DBC[("DBC file")] --> DB["Database<br/>BO_ / SG_ / VAL_"]
+    LOG["candump -L log"] --> LR["LogReader<br/>(a CanSource)"]
+    LIVE["SocketCAN reader<br/>(planned)"] -.-> FR
+    LR --> FR["CanFrame"]
+    FR --> DEC["decode_frame"]
+    DB --> DEC
+    DEC --> CLI["canlog_cli<br/>text / CSV"]
+    DEC --> GUI["canlog_gui<br/>table, signals, plot"]
+    FR --> SER["extract_series"]
+    SER --> GUI
+```
+
+Design decisions:
+
+- **The core library has no Qt and no OS-specific code.** The CLI, the GUI and the tests are all thin layers on top of it, and the planned SocketCAN reader will be too.
+- **`CanSource` is the only thing the front ends know about.** A log file and a live bus are interchangeable behind it.
+- **Decoding is pure functions with no I/O**, which is why it is covered by unit tests, including a sample log encoded by an independent Python script.
+- **Bad input has two paths.** A malformed DBC throws `ParseError` with a line number. A malformed log line is skipped and counted, because real logs contain junk.
+- **The DBC message struct uses `signal_defs`, not `signals`**, because Qt defines `signals` as a macro and would break the header in the GUI.
+
 ## Layout
 
 | Path | Purpose |
