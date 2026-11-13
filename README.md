@@ -4,9 +4,8 @@
 
    ![canlog GUI](docs/screenshot.png)
 
-A CAN frame logger and DBC decoder in C++17. Phase 1 (this repo today) decodes
-`candump -L` logs with a DBC file; the roadmap below grows it into a live
-SocketCAN logger with a Qt GUI.
+A C++17 library, CLI and Qt 6 GUI that decode CAN logs using DBC files.
+Live capture over SocketCAN is next on the roadmap.
 
 ```
 $ canlog_cli --dbc data/sample.dbc --log data/sample.log
@@ -32,6 +31,10 @@ and builds on Linux, macOS and Windows; only the future SocketCAN reader is Linu
 
 `canlog_gui` shows the capture as a trace table, the decoded signals of the selected
 frame, and a plot of any signal over time. It is built only when Qt 6 is found.
+
+**Prebuilt Windows binaries:** see the latest run in the
+[Actions tab](https://github.com/amrfouda/canlog/actions) (artifact `canlog-windows`),
+or the [Releases page](https://github.com/amrfouda/canlog/releases) once a release exists.
 
 1. Install Qt 6 (Qt Online Installer, free Qt account) and tick the **MSVC 64-bit** kit
    for your Visual Studio, e.g. `C:\Qt\6.7.2\msvc2019_64`.
@@ -115,6 +118,7 @@ On Linux: `sudo apt install qt6-base-dev`, then the normal build; the GUI is pic
    - Qt note: `canlog` already avoids the name `signals` (a Qt macro).
 4. **Protocol depth**: CAN FD, extended multiplexing, J1939 PGN/SA helpers, ASC and BLF import.
 5. **Engineering polish** (what reviewers look at)
-   - GitHub Actions: build + `ctest` on GCC and Clang, plus an ASan/UBSan job.
-   - `clang-format`, `clang-tidy`, a short benchmark (frames/second).
-   - A screenshot or GIF of the GUI at the top of this README.
+   - [x] GitHub Actions: Windows (MSVC + Qt GUI) and Linux (GCC, ASan + UBSan), tests on every push
+   - [x] Screenshot and build badge in this README
+   - [ ] Clang build in CI, `clang-format`, `clang-tidy`
+   - [ ] A short benchmark (frames/second)
