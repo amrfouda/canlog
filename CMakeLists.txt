@@ -25,6 +25,16 @@ target_include_directories(canlog PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(canlog_cli apps/canlog_cli.cpp)
 target_link_libraries(canlog_cli PRIVATE canlog)
 
+# Throughput benchmark. Run it from a Release build:
+#   cmake --build build --config Release && build/Release/canlog_bench
+option(CANLOG_BUILD_BENCH "Build the benchmark program" ON)
+if(CANLOG_BUILD_BENCH)
+    add_executable(canlog_bench bench/canlog_bench.cpp)
+    target_link_libraries(canlog_bench PRIVATE canlog)
+    target_compile_definitions(canlog_bench PRIVATE
+        CANLOG_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+endif()
+
 # Qt 6 GUI. Optional: skipped automatically when Qt 6 cannot be found, so the
 # library, CLI and tests still build on machines without Qt. To enable it, point
 # CMake at your Qt install, e.g.
